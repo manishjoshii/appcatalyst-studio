@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { api, isAuthenticated, removeAuthToken, getUserInfo, removeUserInfo } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 import { RuntimeErrorAlert, RuntimeError } from "@/components/RuntimeErrorAlert";
@@ -24,6 +25,7 @@ export function ProjectView() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, logout } = useAuth();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -40,12 +42,9 @@ export function ProjectView() {
   // Track edited files for current streaming response
   const currentEditedFilesRef = useRef<string[]>([]);
 
-  // Check authentication
-  useEffect(() => {
-    if (!isAuthenticated()) {
-      navigate("/login");
-    }
-  }, [navigate]);
+  const handleLogout = () => {
+    logout();
+  };
 
   // Load chat history on mount
   useEffect(() => {
@@ -82,12 +81,6 @@ export function ProjectView() {
 
     loadData();
   }, [projectId, toast]);
-
-  const handleLogout = () => {
-    removeAuthToken();
-    removeUserInfo();
-    navigate("/login");
-  };
 
   const handleSendMessage = useCallback((content: string) => {
     if (!projectId) return;
@@ -363,13 +356,7 @@ Please analyze this error and fix the code to resolve it.`;
             <div className="flex items-center gap-2 px-2 py-1 bg-muted/30 rounded-full border border-border/50">
               <Avatar className="h-6 w-6 border border-primary/20">
                 <AvatarFallback className="text-[10px] bg-primary/10 text-primary font-semibold">
-                  {(() => {
-                    const userInfo = getUserInfo();
-                    if (userInfo?.name) {
-                      return userInfo.name.charAt(0).toUpperCase();
-                    }
-                    return "U";
-                  })()}
+                  {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
                 </AvatarFallback>
               </Avatar>
               {project.role && (

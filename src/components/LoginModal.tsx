@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Loader2, Lock, Mail, Sparkles } from "lucide-react";
-import { api, setAuthToken, setUserInfo } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,8 @@ export function LoginModal() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const { login } = useAuth();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -29,16 +31,13 @@ export function LoginModal() {
     setIsLoading(true);
 
     try {
-      const response = await api.login({ username: email, password });
-      setAuthToken(response.token);
-      if (response.user) {
-        setUserInfo(response.user);
-      }
+      await login({ username: email, password });
       toast({
         title: "Welcome back!",
         description: "Successfully logged in",
       });
-      navigate("/projects");
+      const origin = (location.state as { from?: Location })?.from?.pathname || "/projects";
+      navigate(origin, { replace: true });
     } catch (error) {
       toast({
         title: "Login failed",

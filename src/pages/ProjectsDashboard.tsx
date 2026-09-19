@@ -6,15 +6,17 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { api, removeAuthToken, removeUserInfo, getUserInfo } from "@/lib/api";
+import { api } from "@/lib/api";
 import { ProjectSummaryResponse } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { generateGradient, cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export function ProjectsDashboard() {
     const navigate = useNavigate();
     const { toast } = useToast();
+    const { user, logout } = useAuth();
     const [projects, setProjects] = useState<ProjectSummaryResponse[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -130,9 +132,7 @@ export function ProjectsDashboard() {
     };
 
     const handleLogout = () => {
-        removeAuthToken();
-        removeUserInfo();
-        navigate("/login");
+        logout();
     };
 
     const filteredProjects = projects.filter((project) =>
@@ -155,13 +155,7 @@ export function ProjectsDashboard() {
                             <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full">
                                 <Avatar className="h-9 w-9">
                                     <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-                                        {(() => {
-                                            const userInfo = getUserInfo();
-                                            if (userInfo?.name) {
-                                                return userInfo.name.charAt(0).toUpperCase();
-                                            }
-                                            return "U";
-                                        })()}
+                                        {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
                                     </AvatarFallback>
                                 </Avatar>
                             </Button>
@@ -169,10 +163,10 @@ export function ProjectsDashboard() {
                         <DropdownMenuContent align="end" className="w-56">
                             <div className="flex flex-col space-y-1 p-2">
                                 <p className="text-sm font-medium leading-none">
-                                    {getUserInfo()?.name || "User"}
+                                    {user?.name || "User"}
                                 </p>
                                 <p className="text-xs leading-none text-muted-foreground">
-                                    {getUserInfo()?.username || ""}
+                                    {user?.username || ""}
                                 </p>
                             </div>
                             <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600 cursor-pointer">

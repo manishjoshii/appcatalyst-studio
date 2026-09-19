@@ -1,23 +1,24 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { isAuthenticated } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { Sparkles, Loader2 } from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
-    // Redirect based on auth status
-    if (isAuthenticated()) {
-      // If authenticated, redirect to projects dashboard
-      navigate("/projects");
-    } else {
-      navigate("/login");
+    if (!isLoading) {
+      if (isAuthenticated) {
+        navigate("/projects", { replace: true });
+      } else {
+        navigate("/login", { replace: true });
+      }
     }
-  }, [navigate]);
+  }, [isAuthenticated, isLoading, navigate]);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background">
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-1/3 left-1/3 w-[500px] h-[500px] bg-primary/5 rounded-full blur-3xl" />
         <div className="absolute bottom-1/3 right-1/3 w-[500px] h-[500px] bg-secondary/5 rounded-full blur-3xl" />
@@ -29,7 +30,7 @@ const Index = () => {
         </div>
         <h1 className="text-3xl font-bold gradient-text mb-4">AppCatalyst Studio</h1>
         <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="w-4 h-4 animate-spin" />
+          <Loader2 className="w-4 h-4 animate-spin text-primary" />
           <span>Loading...</span>
         </div>
       </div>

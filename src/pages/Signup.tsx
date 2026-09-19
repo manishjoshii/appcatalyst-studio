@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Loader2, Mail, Sparkles, User, Lock } from "lucide-react";
-import { api, setAuthToken, setUserInfo } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,8 @@ export default function Signup() {
     const [password, setPassword] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const navigate = useNavigate();
+    const location = useLocation();
+    const { signup } = useAuth();
     const { toast } = useToast();
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -30,14 +32,13 @@ export default function Signup() {
         setIsLoading(true);
 
         try {
-            const response = await api.signup({ name, username: email, password });
-            setAuthToken(response.token);
-            setUserInfo(response.user);
+            await signup({ name, username: email, password });
             toast({
                 title: "Welcome!",
                 description: "Account created successfully",
             });
-            navigate("/projects");
+            const origin = (location.state as { from?: Location })?.from?.pathname || "/projects";
+            navigate(origin, { replace: true });
         } catch (error) {
             toast({
                 title: "Signup failed",
