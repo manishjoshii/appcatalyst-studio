@@ -1,12 +1,35 @@
-import { ChatMessage, DeployResponse, FileNode, LoginCredentials, LoginResponse, ProjectSummaryResponse, ProjectRequest, ProjectResponse, ProjectMember, ProjectRole, SignupRequest, AuthResponse } from "./types";
+import {
+  ChatMessage,
+  DeployResponse,
+  FileNode,
+  LoginCredentials,
+  AuthResponse,
+  UserProfileResponse,
+  ProjectSummaryResponse,
+  ProjectResponse,
+  ProjectMember,
+  ProjectRole,
+  SignupRequest,
+  UsageTodayResponse,
+  PlanResponse,
+  SubscriptionResponse,
+  CheckoutResponse,
+  PortalResponse,
+} from "./types";
 
-const BASE_URL = "http://localhost:8080";
+const BASE_URL = "http://localhost:8080/api/v1";
 
-export const getAuthToken = () => localStorage.getItem("auth_token");
+export const AUTH_TOKEN_KEY = "auth_token";
+export const USER_INFO_KEY = "user_info";
+export const PREVIEW_URL_KEY = "preview_url";
+export const OPEN_TABS_KEY = "open_tabs";
+export const ACTIVE_TAB_KEY = "active_tab";
 
-export const setAuthToken = (token: string) => localStorage.setItem("auth_token", token);
+export const getAuthToken = () => localStorage.getItem(AUTH_TOKEN_KEY);
 
-export const removeAuthToken = () => localStorage.removeItem("auth_token");
+export const setAuthToken = (token: string) => localStorage.setItem(AUTH_TOKEN_KEY, token);
+
+export const removeAuthToken = () => localStorage.removeItem(AUTH_TOKEN_KEY);
 
 export const isAuthenticated = () => !!getAuthToken();
 
@@ -16,21 +39,37 @@ const getAuthHeaders = (): HeadersInit => {
 };
 
 // User info storage
-export const setUserInfo = (user: { id: number; username: string; name: string }) => {
-  localStorage.setItem("user_info", JSON.stringify(user));
+export const setUserInfo = (user: UserProfileResponse) => {
+  localStorage.setItem(USER_INFO_KEY, JSON.stringify(user));
 };
 
-export const getUserInfo = (): { id: number; username: string; name: string } | null => {
-  const userInfo = localStorage.getItem("user_info");
-  return userInfo ? JSON.parse(userInfo) : null;
+export const getUserInfo = (): UserProfileResponse | null => {
+  const userInfo = localStorage.getItem(USER_INFO_KEY);
+  if (!userInfo) return null;
+  try {
+    return JSON.parse(userInfo);
+  } catch {
+    return null;
+  }
 };
 
-export const removeUserInfo = () => localStorage.removeItem("user_info");
+export const removeUserInfo = () => localStorage.removeItem(USER_INFO_KEY);
 
-// LocalStorage keys
-export const PREVIEW_URL_KEY = "preview_url";
-export const OPEN_TABS_KEY = "open_tabs";
-export const ACTIVE_TAB_KEY = "active_tab";
+// Custom event dispatcher for 401 unauthorized
+export const notifyUnauthorized = () => {
+  removeAuthToken();
+  removeUserInfo();
+  window.dispatchEvent(new CustomEvent("app:unauthorized"));
+};
+
+// Internal fetch wrapper that checks for 401 Unauthorized
+async function customFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const response = await fetch(input, init);
+  if (response.status === 401) {
+    notifyUnauthorized();
+  }
+  return response;
+}
 
 // API response format for files endpoint
 interface FilesApiResponse {
@@ -95,8 +134,9 @@ function buildFileTree(paths: { path: string }[]): FileNode[] {
 }
 
 export const api = {
-  async login(credentials: LoginCredentials): Promise<LoginResponse> {
-    const response = await fetch(`${BASE_URL}/api/auth/login`, {
+  // Authentication Endpoints
+  async login(credentials: LoginCredentials): Promise<AuthResponse> {
+    const response = await fetch(`${BASE_URL}/account/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(credentials),
@@ -111,7 +151,7 @@ export const api = {
   },
 
   async signup(data: SignupRequest): Promise<AuthResponse> {
-    const response = await fetch(`${BASE_URL}/api/auth/signup`, {
+    const response = await fetch(`${BASE_URL}/account/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -125,8 +165,97 @@ export const api = {
     return response.json();
   },
 
+  async getProfile(): Promise<UserProfileResponse> {
+    const response = await customFetch(`${BASE_URL}/account/auth/me`, {
+      headers: { ...getAuthHeaders() },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch profile");
+    }
+
+    return response.json();
+  },
+
+  // Project Endpoints
+  async getProjects(): Promise<ProjectSummaryResponse[]> {
+    const response = await customFetch(`${BASE_URL}/workspace/projects`, {
+      headers: { ...getAuthHeaders() },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch projects");
+    }
+
+    return response.json();
+  },
+
+  async createProject(name: string): Promise<ProjectSummaryResponse> {
+    const response = await customFetch(`${BASE_URL}/workspace/projects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      body: JSON.stringify({ name }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to create project");
+    }
+
+    return response.json();
+  },
+
+  async getProject(id: string): Promise<ProjectResponse> {
+    const response = await customFetch(`${BASE_URL}/workspace/projects/${id}`, {
+      headers: { ...getAuthHeaders() },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch project");
+    }
+
+    return response.json();
+  },
+
+  async updateProject(id: string, name: string): Promise<ProjectResponse> {
+    const response = await customFetch(`${BASE_URL}/workspace/projects/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      body: JSON.stringify({ name }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to update project");
+    }
+
+    return response.json();
+  },
+
+  async deleteProject(id: string): Promise<void> {
+    const response = await customFetch(`${BASE_URL}/workspace/projects/${id}`, {
+      method: "DELETE",
+      headers: { ...getAuthHeaders() },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to delete project");
+    }
+  },
+
+  async downloadProjectZip(id: string): Promise<Blob> {
+    const response = await customFetch(`${BASE_URL}/workspace/projects/${id}/files/download-zip`, {
+      headers: { ...getAuthHeaders() },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to download project");
+    }
+
+    return response.blob();
+  },
+
+  // File Endpoints
   async getFiles(projectId: string): Promise<FileNode[]> {
-    const response = await fetch(`${BASE_URL}/api/projects/${projectId}/files`, {
+    const response = await customFetch(`${BASE_URL}/workspace/projects/${projectId}/files`, {
       headers: { ...getAuthHeaders() },
     });
 
@@ -139,8 +268,8 @@ export const api = {
   },
 
   async getFileContent(projectId: string, path: string): Promise<string> {
-    const response = await fetch(
-      `${BASE_URL}/api/projects/${projectId}/files/content?path=${path}`,
+    const response = await customFetch(
+      `${BASE_URL}/workspace/projects/${projectId}/files/content?path=${encodeURIComponent(path)}`,
       {
         headers: { ...getAuthHeaders() },
       }
@@ -157,7 +286,7 @@ export const api = {
   },
 
   async deploy(projectId: string): Promise<DeployResponse> {
-    const response = await fetch(`${BASE_URL}/api/projects/${projectId}/deploy`, {
+    const response = await customFetch(`${BASE_URL}/workspace/projects/${projectId}/deploy`, {
       method: "POST",
       headers: { ...getAuthHeaders() },
     });
@@ -169,83 +298,9 @@ export const api = {
     return response.json();
   },
 
-  async getProjects(): Promise<ProjectSummaryResponse[]> {
-    const response = await fetch(`${BASE_URL}/api/projects`, {
-      headers: { ...getAuthHeaders() },
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to fetch projects");
-    }
-
-    return response.json();
-  },
-
-  async createProject(name: string): Promise<ProjectSummaryResponse> {
-    const response = await fetch(`${BASE_URL}/api/projects`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      body: JSON.stringify({ name }),
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to create project");
-    }
-
-    return response.json();
-  },
-
-  async getProject(id: string): Promise<ProjectResponse> {
-    const response = await fetch(`${BASE_URL}/api/projects/${id}`, {
-      headers: { ...getAuthHeaders() },
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to fetch project");
-    }
-
-    return response.json();
-  },
-
-  async updateProject(id: string, name: string): Promise<ProjectResponse> {
-    const response = await fetch(`${BASE_URL}/api/projects/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      body: JSON.stringify({ name }),
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to update project");
-    }
-
-    return response.json();
-  },
-
-  async deleteProject(id: string): Promise<void> {
-    const response = await fetch(`${BASE_URL}/api/projects/${id}`, {
-      method: "DELETE",
-      headers: { ...getAuthHeaders() },
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to delete project");
-    }
-  },
-
-  async downloadProjectZip(id: string): Promise<Blob> {
-    const response = await fetch(`${BASE_URL}/api/projects/${id}/files/download-zip`, {
-      headers: { ...getAuthHeaders() },
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to download project");
-    }
-
-    return response.blob();
-  },
-
+  // Project Members Endpoints
   async getProjectMembers(projectId: string): Promise<ProjectMember[]> {
-    const response = await fetch(`${BASE_URL}/api/projects/${projectId}/members`, {
+    const response = await customFetch(`${BASE_URL}/workspace/projects/${projectId}/members`, {
       headers: { ...getAuthHeaders() },
     });
 
@@ -257,7 +312,7 @@ export const api = {
   },
 
   async inviteMember(projectId: string, username: string, role: ProjectRole): Promise<void> {
-    const response = await fetch(`${BASE_URL}/api/projects/${projectId}/members`, {
+    const response = await customFetch(`${BASE_URL}/workspace/projects/${projectId}/members`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({ username, role }),
@@ -270,7 +325,7 @@ export const api = {
   },
 
   async updateMemberRole(projectId: string, userId: number, role: ProjectRole): Promise<void> {
-    const response = await fetch(`${BASE_URL}/api/projects/${projectId}/members/${userId}`, {
+    const response = await customFetch(`${BASE_URL}/workspace/projects/${projectId}/members/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({ role }),
@@ -282,7 +337,7 @@ export const api = {
   },
 
   async removeMember(projectId: string, userId: number): Promise<void> {
-    const response = await fetch(`${BASE_URL}/api/projects/${projectId}/members/${userId}`, {
+    const response = await customFetch(`${BASE_URL}/workspace/projects/${projectId}/members/${userId}`, {
       method: "DELETE",
       headers: { ...getAuthHeaders() },
     });
@@ -292,8 +347,9 @@ export const api = {
     }
   },
 
+  // Chat Endpoints
   async getChatHistory(projectId: string): Promise<ChatMessage[]> {
-    const response = await fetch(`${BASE_URL}/api/chat/projects/${projectId}`, {
+    const response = await customFetch(`${BASE_URL}/intelligence/chat/projects/${projectId}`, {
       headers: { ...getAuthHeaders() },
     });
 
@@ -314,10 +370,10 @@ export const api = {
   ) {
     const controller = new AbortController();
 
-    fetch(`${BASE_URL}/api/chat/stream`, {
+    customFetch(`${BASE_URL}/intelligence/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      body: JSON.stringify({ message, projectId }),
+      body: JSON.stringify({ message, projectId: Number(projectId) }),
       signal: controller.signal,
     })
       .then(async (response) => {
@@ -328,10 +384,7 @@ export const api = {
 
         const decoder = new TextDecoder();
 
-        // Buffers
-        let sseBuffer = ""; // To handle split SSE lines
-        let fullContentBuffer = ""; // To accumulate clean text for file regex
-        let lastProcessedIndex = 0; // Optimization for regex
+        let sseBuffer = "";
 
         while (true) {
           const { done, value } = await reader.read();
@@ -340,7 +393,6 @@ export const api = {
           const chunk = decoder.decode(value, { stream: true });
           sseBuffer += chunk;
 
-          // Process line by line to handle SSE format (data: ...)
           const lines = sseBuffer.split("\n");
           sseBuffer = lines.pop() || "";
 
@@ -352,19 +404,14 @@ export const api = {
             if (!dataStr) continue;
 
             try {
-              // FIX: Parse JSON to get the real text with newlines preserved
               const parsed = JSON.parse(dataStr);
-              const content = parsed.text;
-
-              // 1. Send clean text to UI
-              onChunk(content);
-
-              // 2. Accumulate for file parsing (Same as before)
-              fullContentBuffer += content;
-              // ... (rest of regex logic) ...
-
-            } catch (e) {
-              console.error("Failed to parse SSE JSON:", e);
+              const content = parsed.text || parsed.content || (typeof parsed === "string" ? parsed : "");
+              if (content) {
+                onChunk(content);
+              }
+            } catch {
+              // Plain string chunk fallback
+              onChunk(dataStr);
             }
           }
         }
@@ -379,6 +426,69 @@ export const api = {
       });
 
     return () => controller.abort();
-  }
+  },
 
+  // Usage & Billing Endpoints
+  async getTodayUsage(): Promise<UsageTodayResponse> {
+    const response = await customFetch(`${BASE_URL}/api/usage/today`, {
+      headers: { ...getAuthHeaders() },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch today's usage");
+    }
+
+    return response.json();
+  },
+
+  async getAllPlans(): Promise<PlanResponse[]> {
+    const response = await customFetch(`${BASE_URL}/api/plans`, {
+      headers: { ...getAuthHeaders() },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch plans");
+    }
+
+    return response.json();
+  },
+
+  async getMySubscription(): Promise<SubscriptionResponse> {
+    const response = await customFetch(`${BASE_URL}/account/api/me/subscription`, {
+      headers: { ...getAuthHeaders() },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch subscription");
+    }
+
+    return response.json();
+  },
+
+  async createCheckout(planId: number): Promise<CheckoutResponse> {
+    const response = await customFetch(`${BASE_URL}/account/api/payments/checkout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      body: JSON.stringify({ planId }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to initiate checkout");
+    }
+
+    return response.json();
+  },
+
+  async openCustomerPortal(): Promise<PortalResponse> {
+    const response = await customFetch(`${BASE_URL}/account/api/payments/portal`, {
+      method: "POST",
+      headers: { ...getAuthHeaders() },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to open billing portal");
+    }
+
+    return response.json();
+  },
 };
